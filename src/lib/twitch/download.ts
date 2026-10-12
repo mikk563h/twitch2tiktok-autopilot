@@ -7,17 +7,23 @@ import { config, paths } from "../config";
 import { run } from "../proc";
 import { probe, type MediaInfo } from "../media/probe";
 import { getClipDownloadUrls, TWITCH_DOWNLOAD_SCOPES, TwitchError, userToken } from "./api";
-import type { Settings } from "../settings";
+import { getState, setState, type Settings } from "../settings";
 
 export class PermissionError extends Error {}
 
 export type DownloadMethod = "official" | "public";
 
-export async function officialDownloadAvailable(): Promise<{ ok: boolean; reason?: string; editorId?: string }> {
+export const DENIED_KEY = "twitch.officialDenied";
+
+export async function officialDownloadAvailable(): Promise<{ ok: boolean; reason?: string; editorId?: string; notEditor?: boolean }> {
   const t = await userToken().catch(() => null);
   if (!t) return { ok: false, reason: "Ingen Twitch-brugerkonto forbundet" };
   if (t.status !== "ok") return { ok: false, reason: t.statusMessage ?? "Twitch-forbindelsen kræver ny godkendelse" };
   if (!t.scopes.some((s) => TWITCH_DOWNLOAD_SCOPES.includes(s))) return { ok: false, reason: "Twitch-tokenet mangler scope editor:manage:clips eller channel:manage:clips" };
+  const denied = await getState<{ at: string; account: string }>(DENIED_KEY);
+  if (denied && denied.account === t.accountId && Date.now() - Date.parse(denied.at) < 24 * 3600_000) {
+    return { ok: false, reason: `Kontoen ${t.accountName ?? ""} er ikke editor på kanalen (Twitch svarede 403)`, notEditor: true };
+  }
   return { ok: true, editorId: t.accountId ?? undefined };
 }
 
@@ -54,6 +60,7 @@ export async function downloadClip(clip: { id: number; twitch_clip_id: string; b
         await downloadUrl(url, tmp);
       } catch (err) {
         if (err instanceof TwitchError && (err.status === 401 || err.status === 403)) {
+          if (err.status === 403) await setState(DENIED_KEY, { at: new Date().toISOString(), account: avail.editorId });
           if (wanted === "official") throw new PermissionError(`Twitch afviste download (${err.status}): kontoen er ikke broadcaster/editor for kanalen`);
           method = "public";
         } else {

@@ -11,6 +11,7 @@ import { twitchRedirectUri } from "@/lib/twitch/oauth";
 import { redirectUri as tiktokRedirectUri, TIKTOK_SCOPES } from "@/lib/tiktok/api";
 import { TWITCH_DOWNLOAD_SCOPES } from "@/lib/twitch/api";
 import { getClip } from "@/lib/clips";
+import { DENIED_KEY } from "@/lib/twitch/download";
 import { AutoRefresh, ActionForm, SubmitButton } from "@/components/client";
 import { PageHeader, StatusBadge, ago, bytes, Notice, type Tone } from "@/components/ui";
 import { testTwitch, testAi, testTikTok, testTwitchDownload, confirmRights, runTestClip, completeSetup, scanNow } from "../../actions";
@@ -44,6 +45,7 @@ export default async function SetupPage() {
     getState<string>("ai.lastOkAt"), getState<string>("twitch.apiOkAt"), getState<string>("twitch.userApiOkAt"), getState<string>("tiktok.lastOkAt"),
     sql()`SELECT count(*)::int AS n FROM clips`, sql()`SELECT key FROM settings`,
   ]);
+  const notEditor = !!(await getState<{ at: string }>(DENIED_KEY));
   const saved = new Set(settingsRows.map((r) => r.key as string));
   const testClip = s.setup.testClipId ? await getClip(s.setup.testClipId) : null;
   const workersOk = workers.every((w) => w.alive);
@@ -71,17 +73,17 @@ export default async function SetupPage() {
           {config.twitchClientId && <ActionForm action={testTwitch}><SubmitButton className="btn-ghost">Test Twitch API</SubmitButton></ActionForm>}
         </Step>
 
-        <Step n={3} title="Twitch OAuth (valgfri)" tone={twitchUser ? (twitchUser.status === "ok" ? "ok" : "bad") : "muted"} status={twitchUser ? `Forbundet som ${twitchUser.account_name}` : "Ikke forbundet — offentlig download bruges"}>
+        <Step n={3} title="Twitch OAuth (valgfri)" tone={twitchUser ? (twitchUser.status === "ok" ? (notEditor ? "muted" : "ok") : "bad") : "muted"} status={twitchUser ? `Forbundet som ${twitchUser.account_name}` : "Ikke forbundet — offentlig download bruges"}>
           <p>Forbind den Twitch-konto, der er <b>broadcaster</b> (sondergaardlol selv) eller <b>editor</b> på kanalen. Så bruges Twitchs officielle download-API. Uden forbindelse hentes de offentlige clip-filer direkte.</p>
           <div className="flex gap-2"><a href="/api/oauth/twitch/start?role=editor" className="btn-ghost">Forbind som editor</a><a href="/api/oauth/twitch/start?role=broadcaster" className="btn-ghost">Forbind som broadcaster</a></div>
         </Step>
 
-        <Step n={4} title="Twitch broadcaster/editor-rettigheder" tone={twitchUserOk && hasEditorScope ? "ok" : twitchUser ? "warn" : "muted"} status={twitchUserOk && hasEditorScope ? "Officiel download bekræftet" : twitchUser ? "Ikke bekræftet" : "Springes over"}>
+        <Step n={4} title="Twitch broadcaster/editor-rettigheder (valgfri)" tone={notEditor ? "muted" : twitchUserOk && hasEditorScope ? "ok" : twitchUser ? "warn" : "muted"} status={notEditor ? "Ikke editor — offentlig download bruges (virker fint)" : twitchUserOk && hasEditorScope ? "Officiel download bekræftet" : twitchUser ? "Ikke bekræftet" : "Springes over — offentlig download bruges"}>
           <p>Kræver scope <Code>editor:manage:clips</Code> (editor) eller <Code>channel:manage:clips</Code> (broadcaster), og at kontoen er editor på kanalen (sættes af kanalejeren under Creator Dashboard → Settings → Roles).</p>
           {twitchUser && <ActionForm action={testTwitchDownload}><SubmitButton className="btn-ghost">Test download-rettighed</SubmitButton></ActionForm>}
         </Step>
 
-        <Step n={5} title="AI API-nøgle (Claude)" tone={aiOk ? "ok" : config.anthropicApiKey ? "warn" : "bad"} status={aiOk ? `Virker (${ago(aiOk)})` : config.anthropicApiKey ? "Ikke testet" : "Mangler"}>
+        <Step n={5} title="AI API-nøgle (Claude, valgfri)" tone={aiOk ? "ok" : config.anthropicApiKey ? "warn" : "muted"} status={aiOk ? `Virker (${ago(aiOk)})` : config.anthropicApiKey ? "Ikke testet" : "Slået fra — Twitch-titler bruges (gratis)"}>
           <p>Hent en nøgle på <a className="text-accent-2 underline" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">console.anthropic.com</a> og sæt <Code>ANTHROPIC_API_KEY</Code> i <Code>.env</Code>. Model: <Code>{config.aiModel}</Code>. Transskription kører lokalt med whisper.cpp — ingen ekstra nøgle.</p>
           {config.anthropicApiKey && <ActionForm action={testAi}><SubmitButton className="btn-ghost">Test AI</SubmitButton></ActionForm>}
         </Step>

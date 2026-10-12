@@ -68,10 +68,16 @@ export async function exchangeCode(code: string): Promise<StoredToken> {
   const { key, secret } = creds();
   const body = await tokenRequest({ client_key: key, client_secret: secret, code, grant_type: "authorization_code", redirect_uri: redirectUri() });
   const token = await persist(body);
+  // Nickname/username come from creator_info (user.info.basic doesn't include the username).
   try {
-    const u = await userInfo(token.accessToken);
-    await saveToken({ ...token, accountName: u.display_name ?? null, meta: { ...token.meta, avatar: u.avatar_url, username: u.username } });
-  } catch { /* profile info is cosmetic */ }
+    const ci = await tiktokPost<CreatorInfo>("/v2/post/publish/creator_info/query/", {}, token.accessToken);
+    await saveToken({ ...token, accountName: ci.creator_nickname || null, meta: { ...token.meta, avatar: ci.creator_avatar_url, username: ci.creator_username } });
+  } catch {
+    try {
+      const u = await userInfo(token.accessToken);
+      await saveToken({ ...token, accountName: u.display_name ?? null, meta: { ...token.meta, avatar: u.avatar_url } });
+    } catch { /* profile info is cosmetic */ }
+  }
   return (await loadToken("tiktok"))!;
 }
 
@@ -122,7 +128,7 @@ export async function tiktokPost<T>(path: string, body: unknown, token?: string)
 
 export async function userInfo(token?: string) {
   const tok = token ?? (await accessToken());
-  const res = await fetch(`${config.tiktokApiBase}/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username`, { headers: { Authorization: `Bearer ${tok}` }, signal: AbortSignal.timeout(20_000) });
+  const res = await fetch(`${config.tiktokApiBase}/v2/user/info/?fields=open_id,union_id,avatar_url,display_name`, { headers: { Authorization: `Bearer ${tok}` }, signal: AbortSignal.timeout(20_000) });
   const j = (await res.json().catch(() => ({}))) as ApiEnvelope<{ user: { open_id: string; display_name?: string; avatar_url?: string; username?: string } }>;
   if (!res.ok || (j.error && j.error.code !== "ok")) throw new TikTokError(`TikTok user/info: ${j.error?.code ?? res.status}`, j.error?.code ?? "error", res.status);
   return j.data!.user;
