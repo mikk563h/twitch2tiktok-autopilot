@@ -21,21 +21,21 @@ export default async function HealthPage() {
   return (
     <>
       <AutoRefresh ms={10000} />
-      <PageHeader title="System Health" subtitle={`Version ${h.version} · ${h.runMode === "batch" ? "Gratis-mode: Vercel + GitHub Actions + Neon" : "Server-mode: Docker-workers"}`} />
+      <PageHeader title="System Health" subtitle={`Version ${h.version} · ${h.runMode === "batch" ? "Gratis-mode: Vercel + Oracle Cloud + Neon" : "Server-mode: Docker-workers"}`} />
       {h.runMode === "workers" && <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Stat label="Disk" value={h.disk ? `${Math.round(diskUsedPct * 100)}%` : "?"} tone={diskUsedPct > 0.9 ? "bad" : diskUsedPct > 0.8 ? "warn" : "ok"} sub={h.disk ? `${bytes(h.disk.free)} fri af ${bytes(h.disk.total)}` : ""} />
         <Stat label="Hukommelse" value={latest ? `${Math.round((1 - Number(latest.mem_free) / Number(latest.mem_total)) * 100)}%` : "?"} sub={latest ? `${bytes(Number(latest.mem_free))} fri` : ""} />
         <Stat label="CPU load (1 min)" value={latest ? Number(latest.load1).toFixed(2) : "?"} sub={latest ? `${latest.cpu_count} kerner` : ""} />
         <Stat label="Database" value={bytes(h.dbSize)} tone={h.dbOk ? undefined : "bad"} sub={h.dbOk ? "PostgreSQL OK" : "NEDE"} />
       </div>}
-      {h.runMode === "batch" && <div className="grid gap-4 md:grid-cols-2"><Stat label="Database (Neon)" value={bytes(h.dbSize)} tone={h.dbOk ? undefined : "bad"} sub={h.dbOk ? "forbundet · gratis plan: 0,5 GB" : "NEDE"} /><Stat label="Seneste GitHub-kørsel" value={ago(h.workers[0]?.lastBeatAt)} tone={h.workers[0]?.alive ? "ok" : "bad"} sub="kører hvert 15. minut" /></div>}
+      {h.runMode === "batch" && <div className="grid gap-4 md:grid-cols-2"><Stat label="Database (Neon)" value={bytes(h.dbSize)} tone={h.dbOk ? undefined : "bad"} sub={h.dbOk ? "forbundet · gratis plan: 0,5 GB" : "NEDE"} /><Stat label="Seneste kørsel" value={ago(h.workers[0]?.lastBeatAt)} tone={h.workers[0]?.alive ? "ok" : "bad"} sub="kører hvert 15. minut" /></div>}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <Card title="Komponenter">
           <div className="space-y-3">
             <StatusLine tone={h.dbOk ? "ok" : "bad"} title="PostgreSQL" detail={h.dbOk ? "forbundet" : "ingen forbindelse"} />
             {h.runMode === "workers" && <StatusLine tone={h.redisOk ? "ok" : "bad"} title="Redis" detail={h.redisOk ? `forbundet · ${h.redisInfo}` : "ingen forbindelse"} />}
-            {h.workers.map((w) => <StatusLine key={w.worker} tone={w.alive ? "ok" : "bad"} title={h.runMode === "batch" ? "GitHub Actions autopilot" : `Worker: ${w.worker}`} detail={`${w.alive ? "kører" : "NEDE"} · ${h.runMode === "batch" ? "seneste kørsel" : "heartbeat"} ${ago(w.lastBeatAt)} · v${String(w.version ?? "?").slice(0, 7)}`} />)}
+            {h.workers.map((w) => <StatusLine key={w.worker} tone={w.alive ? "ok" : "bad"} title={h.runMode === "batch" ? "Autopilot (Oracle-server)" : `Worker: ${w.worker}`} detail={`${w.alive ? "kører" : "NEDE"} · ${h.runMode === "batch" ? "seneste kørsel" : "heartbeat"} ${ago(w.lastBeatAt)} · v${String(w.version ?? "?").slice(0, 7)}`} />)}
           </div>
         </Card>
         <Card title="Seneste succes">
@@ -101,7 +101,7 @@ export default async function HealthPage() {
             </div>
           ))}
         </div>
-        <p className="hint">{h.runMode === "batch" ? "Fulde logs: GitHub → Actions → Autopilot → vælg en kørsel." : "Fulde logs: docker compose logs -f (roteres automatisk: 5 × 10 MB pr. container)."}</p>
+        <p className="hint">{h.runMode === "batch" ? "Fulde logs: journalctl -u t2t-autopilot på Oracle-serveren." : "Fulde logs: docker compose logs -f (roteres automatisk: 5 × 10 MB pr. container)."}</p>
       </Card>
     </>
   );

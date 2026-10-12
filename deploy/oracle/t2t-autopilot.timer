@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the Twitch2TikTok autopilot every 15 minutes (keeps Neon free-tier compute under 100 CU-hours/month)
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

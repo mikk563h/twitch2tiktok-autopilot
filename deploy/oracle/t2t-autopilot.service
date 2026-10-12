@@ -1,0 +1,15 @@
+[Unit]
+Description=Twitch2TikTok autopilot run (scan, edit, upload)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=t2t
+WorkingDirectory=/opt/t2t
+EnvironmentFile=/etc/t2t.env
+Environment=DATA_DIR=/var/lib/t2t/data FFMPEG_PATH=/usr/bin/ffmpeg FFPROBE_PATH=/usr/bin/ffprobe WHISPER_BIN=/usr/local/bin/whisper-cli YTDLP_PATH=/usr/local/bin/yt-dlp FONTS_DIR=/opt/t2t/assets/fonts NODE_ENV=production
+ExecStart=/usr/bin/node --import tsx scripts/run-once.ts
+TimeoutStartSec=55min
+Nice=5
+# A crashed run is simply retried by the next timer tick; state lives in the database.

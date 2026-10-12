@@ -9,6 +9,7 @@ import { ClipThumb } from "@/components/clip-thumb";
 import { scanNow } from "../actions";
 import { config } from "@/lib/config";
 import { latestRuns } from "@/lib/github";
+import { BATCH_STALE_MS } from "@/lib/pipeline/maintenance";
 
 export default async function OverviewPage() {
   const settings = await getSettings();
@@ -23,14 +24,14 @@ export default async function OverviewPage() {
   const errors = n("FAILED") + n("BLOCKED_PERMISSION") + n("NEEDS_USER_ACTION");
 
   const scanAge = twitch.sync.lastSuccessAt ? Date.now() - Date.parse(twitch.sync.lastSuccessAt) : Infinity;
-  const scanLimit = batch ? 75 * 60_000 : Math.max(5 * settings.automation.pollIntervalSec * 1000, 300_000);
+  const scanLimit = batch ? BATCH_STALE_MS : Math.max(5 * settings.automation.pollIntervalSec * 1000, 300_000);
   const twitchTone: Tone = !twitch.configured ? "bad" : !settings.automation.monitorEnabled ? "muted" : scanAge < scanLimit ? "ok" : "bad";
   const tiktokTone: Tone = tiktok.state === "PUBLIC_APPROVED" ? "ok" : tiktok.state === "PRIVATE_ONLY" ? "warn" : tiktok.state === "RATE_LIMITED" ? "warn" : "bad";
 
   return (
     <>
       <AutoRefresh ms={5000} />
-      <PageHeader title="Overview" subtitle={`Overvåger twitch.tv/${twitch.channel} · ${settings.automation.monitorEnabled ? (batch ? "kører automatisk hvert 15. minut (GitHub Actions)" : `scanner hvert ${settings.automation.pollIntervalSec}. sekund`) : "overvågning er slået FRA"}`}
+      <PageHeader title="Overview" subtitle={`Overvåger twitch.tv/${twitch.channel} · ${settings.automation.monitorEnabled ? (batch ? "kører automatisk hvert 15. minut" : `scanner hvert ${settings.automation.pollIntervalSec}. sekund`) : "overvågning er slået FRA"}`}
         actions={<ActionForm action={scanNow}><SubmitButton className="btn-ghost" pendingText="Starter…">{batch ? "Kør nu" : "Scan nu"}</SubmitButton></ActionForm>} />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
@@ -52,7 +53,7 @@ export default async function OverviewPage() {
           <StatusLine tone={tiktokTone} title={TIKTOK_STATE_LABELS[tiktok.state]} detail={tiktok.detail} />
           <div className="mt-4 text-xs text-muted">Auto-publicering: {settings.automation.autoPublish ? <span className="text-ok">TIL</span> : <span className="text-warn">FRA</span>} · tilstand: {settings.tiktok.mode}</div>
         </Card>
-        <Card title={batch ? "Autopilot (GitHub Actions)" : "Workers"}>
+        <Card title={batch ? "Autopilot" : "Workers"}>
           <div className="space-y-3">
             {workers.map((w) => (
               <StatusLine key={w.worker} tone={w.alive ? "ok" : "bad"} title={batch ? (w.alive ? "Kører som planlagt" : "Ingen kørsel for nylig") : w.worker}

@@ -210,7 +210,7 @@ export async function resolveAction(_: ActionResult, fd: FormData) {
 
 export async function scanNow(_: ActionResult) {
   return guard(async () => requestJob({ name: "scan-now" }),
-    (r) => config.runMode === "workers" ? "Scanning startet — resultatet vises om et øjeblik" : r.triggered ? "GitHub-kørsel startet — resultatet vises om 1–3 minutter" : "Bestilt — køres ved næste planlagte kørsel (GITHUB_TOKEN er ikke sat, så den kan ikke startes med det samme)", ["/"]);
+    (r) => config.runMode === "workers" ? "Scanning startet — resultatet vises om et øjeblik" : r.triggered ? "Kørsel startet — resultatet vises om 1–3 minutter" : "Bestilt — udføres ved næste kørsel (inden for 5 minutter)", ["/"]);
 }
 
 export async function historicalImport(_: ActionResult, fd: FormData) {

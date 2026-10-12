@@ -17,8 +17,8 @@ import { uploadBlocker } from "./upload";
 export const WORKERS = ["monitor", "render", "uploader"] as const;
 /** In batch mode the single scheduled GitHub Actions run is the only "worker". */
 export const workerNames = (): string[] => (config.runMode === "batch" ? ["autopilot"] : [...WORKERS]);
-/** Batch runs every 15 min (GitHub may delay schedules); stale after this. */
-const BATCH_STALE_MS = Number(process.env.BATCH_STALE_MIN ?? 75) * 60_000;
+/** The batch runner starts every 5 min (runs can take up to ~45 min while rendering); stale after this. */
+export const BATCH_STALE_MS = Number(process.env.BATCH_STALE_MIN ?? 60) * 60_000;
 const STALE_WORKER_MS = 2 * 60_000;
 const WORKER_GRACE_S = Number(process.env.WORKER_GRACE_S ?? 180);
 

@@ -1,10 +1,10 @@
-# Free 24/7 autopilot: scans Twitch, edits and uploads clips. Dashboard runs on Vercel, DB on Neon.
-name: Autopilot
+# Manual test run of the batch pipeline (scripts/run-once.ts) — for testing only.
+# Production runs on the Oracle Cloud server (deploy/oracle), not on a schedule here:
+# GitHub's terms don't allow Actions to be used as a serverless backend.
+name: Autopilot (test)
 
 on:
-  schedule:
-    - cron: "7,22,37,52 * * * *"   # off-peak minutes: GitHub delays/drops runs scheduled at :00/:15/:30/:45
-  workflow_dispatch: {}       # "Kør nu" in the dashboard triggers this
+  workflow_dispatch: {}
 
 concurrency:
   group: autopilot
@@ -42,6 +42,7 @@ jobs:
       WHISPER_BIN: /tmp/t2t/bin/whisper-cli
       YTDLP_PATH: /tmp/t2t/bin/yt-dlp
       DB_POOL_MAX: "4"
+      RUN_EPHEMERAL: "1"
       LOG_LEVEL: info
     steps:
       - uses: actions/checkout@v5

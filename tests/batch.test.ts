@@ -19,7 +19,7 @@ let mock: Awaited<ReturnType<typeof startMockServer>>;
 
 function runOnce(phase: string, extraEnv: Record<string, string> = {}): Promise<{ code: number; out: string }> {
   const outFile = path.join(process.env.DATA_DIR!, `gh-output-${Date.now()}`);
-  const env: NodeJS.ProcessEnv = { ...process.env, GITHUB_OUTPUT: outFile, LOG_LEVEL: "warn", ...extraEnv };
+  const env: NodeJS.ProcessEnv = { ...process.env, GITHUB_OUTPUT: outFile, LOG_LEVEL: "warn", RUN_EPHEMERAL: "1", ...extraEnv };
   delete env.REDIS_URL; // batch mode
   return new Promise((resolve) => {
     const child = spawn(process.execPath, ["--import", "tsx", path.resolve("scripts/run-once.ts"), phase], { env, stdio: ["ignore", "pipe", "pipe"] });
@@ -97,6 +97,18 @@ describe("gratis-mode: run-once uden Redis (MOCK APIs)", () => {
     expect(r.code, r.out).toBe(0);
     expect((await getClip(Number(row.id)))!.status).toBe("PUBLISHED");
     expect(mock.state.s.aiRequests.length).toBe(aiCalls);
+  });
+
+  it("på en fast server (ikke ephemeral) bevares videofilerne mellem kørsler", { timeout: 240_000 }, async () => {
+    await runIncrementalScan();
+    const s = await getSyncState();
+    await setState("twitch.sync", { ...s, baselineDoneAt: new Date(Date.now() - 3600_000).toISOString(), lastSuccessEnd: new Date(Date.now() - 30_000).toISOString(), lastDeepAt: new Date().toISOString() });
+    mock.state.s.clips.push({ id: "vm-1", created_at: new Date(Date.now() - 10_000).toISOString(), title: "x", view_count: 1 });
+    await updateSettings("automation", { autoPublish: false });
+    expect((await runOnce("all", { RUN_EPHEMERAL: "0" })).code).toBe(0);
+    const [row] = await sql()`SELECT status, render_path FROM clips WHERE twitch_clip_id = 'vm-1'`;
+    expect(row.status).toBe("READY");
+    expect(row.render_path && fs.existsSync(row.render_path)).toBe(true);
   });
 
   it("dashboard-anmodning (upload-now) gemmes i DB og udføres af næste kørsel", async () => {

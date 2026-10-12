@@ -172,7 +172,7 @@ async function main() {
     await evaluateAlerts(); // idle run: still check health + send heartbeat
   }
   // Media files live on the ephemeral runner only; forget their paths so nothing points at them.
-  if (phase !== "plan") await sql()`UPDATE clips SET source_path = NULL, render_path = NULL, render_thumb_path = NULL WHERE source_path IS NOT NULL OR render_path IS NOT NULL OR render_thumb_path IS NOT NULL`;
+  if (phase !== "plan" && process.env.RUN_EPHEMERAL === "1") await sql()`UPDATE clips SET source_path = NULL, render_path = NULL, render_thumb_path = NULL WHERE source_path IS NOT NULL OR render_path IS NOT NULL OR render_thumb_path IS NOT NULL`;
   await beat({ status: "done", durationS: Math.round((Date.now() - started) / 1000) });
   console.log(JSON.stringify(summary));
 }
