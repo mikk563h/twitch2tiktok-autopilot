@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0a0910;
+  --color-surface: #12101a;
+  --color-surface-2: #1a1724;
+  --color-border: #262233;
+  --color-border-strong: #352f47;
+  --color-fg: #ece9f5;
+  --color-muted: #9b95ae;
+  --color-faint: #6b6580;
+  --color-accent: #8b5cf6;
+  --color-accent-2: #a78bfa;
+  --color-accent-soft: #8b5cf61f;
+  --color-ok: #34d399;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+  --color-info: #60a5fa;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-jb), ui-monospace, SFMono-Regular, monospace;
+}
+
+html { color-scheme: dark; }
+body { background: var(--color-bg); color: var(--color-fg); }
+
+@utility card { @apply rounded-xl border border-border bg-surface; }
+@utility card-pad { @apply p-5; }
+@utility btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none; }
+@utility btn-primary { @apply btn bg-accent text-white hover:bg-accent-2; }
+@utility btn-ghost { @apply btn border border-border bg-surface-2 text-fg hover:border-border-strong hover:bg-[#211d2d]; }
+@utility btn-danger { @apply btn border border-bad/40 bg-bad/10 text-bad hover:bg-bad/20; }
+@utility input { @apply w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-fg placeholder:text-faint outline-none focus:border-accent focus:ring-2 focus:ring-accent/25; }
+@utility label { @apply mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted; }
+@utility hint { @apply mt-1 text-xs text-faint; }
+@utility table-row { @apply border-b border-border/70 last:border-0 hover:bg-surface-2/60; }
+
+video { background: #000; }

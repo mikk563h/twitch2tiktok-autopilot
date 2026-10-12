@@ -1,0 +1,102 @@
+# Free 24/7 autopilot: scans Twitch, edits and uploads clips. Dashboard runs on Vercel, DB on Neon.
+name: Autopilot
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # GitHub may start scheduled runs a few minutes late
+  workflow_dispatch: {}       # "Kør nu" in the dashboard triggers this
+
+concurrency:
+  group: autopilot
+  cancel-in-progress: false  # never kill a run mid-upload; the next one waits
+
+permissions:
+  contents: read
+
+env:
+  WHISPER_CPP_VERSION: v1.9.5
+  YTDLP_VERSION: "2026.08.19"
+  WHISPER_MODEL: ${{ vars.WHISPER_MODEL || 'small' }}
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      APP_ENCRYPTION_KEY: ${{ secrets.APP_ENCRYPTION_KEY }}
+      APP_URL: ${{ vars.APP_URL }}
+      APP_VERSION: ${{ github.sha }}
+      TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+      TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+      TWITCH_CHANNEL: ${{ vars.TWITCH_CHANNEL || 'sondergaardlol' }}
+      TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+      TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SMTP_URL: ${{ secrets.SMTP_URL }}
+      ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+      HEARTBEAT_URL: ${{ secrets.HEARTBEAT_URL }}
+      DATA_DIR: ${{ runner.temp }}/t2t-data
+      FFMPEG_PATH: ${{ runner.temp }}/bin/ffmpeg
+      FFPROBE_PATH: ${{ runner.temp }}/bin/ffprobe
+      WHISPER_BIN: ${{ runner.temp }}/bin/whisper-cli
+      YTDLP_PATH: ${{ runner.temp }}/bin/yt-dlp
+      DB_POOL_MAX: "4"
+      LOG_LEVEL: info
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund --omit=optional || npm ci --no-audit --no-fund
+
+      - name: Plan (scan Twitch, check queue)
+        id: plan
+        run: node --import tsx scripts/run-once.ts plan
+
+      # ---- Everything below only runs when there is something to process/upload ----
+      - name: Cache tools
+        if: steps.plan.outputs.work == 'true'
+        id: tools
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/bin
+          key: tools-${{ runner.os }}-whisper-${{ env.WHISPER_CPP_VERSION }}-ytdlp-${{ env.YTDLP_VERSION }}-ffmpeg-7
+
+      - name: Build tools (first run only, ~3 min)
+        if: steps.plan.outputs.work == 'true' && steps.tools.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin" && cd "$RUNNER_TEMP"
+          # FFmpeg (static build incl. libass, x264, loudnorm)
+          curl -fsSL -o ff.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+          tar -xf ff.tar.xz && cp ffmpeg-*-static/ffmpeg ffmpeg-*-static/ffprobe bin/
+          # whisper.cpp
+          git clone --depth 1 --branch "$WHISPER_CPP_VERSION" https://github.com/ggml-org/whisper.cpp wsrc
+          cmake -S wsrc -B wbuild -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DGGML_NATIVE=OFF
+          cmake --build wbuild -j"$(nproc)" --target whisper-cli
+          cp wbuild/bin/whisper-cli bin/
+          # yt-dlp
+          curl -fsSL -o bin/yt-dlp "https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp_linux"
+          chmod +x bin/*
+
+      - name: Verify tools
+        if: steps.plan.outputs.work == 'true'
+        run: |
+          "$FFMPEG_PATH" -hide_banner -filters | grep -E " (ass|loudnorm) " >/dev/null || { echo "FFmpeg mangler libass/loudnorm"; exit 1; }
+          "$WHISPER_BIN" --help >/dev/null 2>&1 || true
+          "$YTDLP_PATH" --version
+
+      - name: Cache whisper model
+        if: steps.plan.outputs.work == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/t2t-data/models
+          key: whisper-model-${{ env.WHISPER_MODEL }}
+
+      - name: Work (edit, upload, check status)
+        if: steps.plan.outputs.work == 'true'
+        run: node --import tsx scripts/run-once.ts work

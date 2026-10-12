@@ -1,0 +1,150 @@
+# Twitch2TikTok Autopilot — full 24/7 stack on one VPS.
+name: t2t
+
+x-app: &app
+  image: t2t-app:${APP_VERSION:-latest}
+  env_file: .env
+  environment:
+    APP_VERSION: ${APP_VERSION:-latest}
+    DATABASE_URL: postgres://${POSTGRES_USER:-t2t}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-t2t}
+    REDIS_URL: redis://redis:6379
+    DATA_DIR: /data
+  volumes:
+    - appdata:/data
+  restart: unless-stopped
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    migrate: { condition: service_completed_successfully }
+  logging: &logging
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
+
+x-worker-health: &worker-health
+  # Workers write a heartbeat file every 15 s; stale for 90 s = unhealthy.
+  test: ["CMD", "node", "-e", "const t=+require('fs').readFileSync('/tmp/worker-heartbeat','utf8');process.exit(Date.now()-t<90000?0:1)"]
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 60s
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-t2t}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-t2t}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # AOF persistence: queued jobs survive a restart (the DB is still the source of truth).
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["node", "--import", "tsx", "src/lib/migrate.ts"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  web:
+    <<: *app
+    command: ["node_modules/.bin/next", "start", "-p", "3000", "-H", "0.0.0.0"]
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  monitor:
+    <<: *app
+    command: ["node", "--import", "tsx", "src/workers/monitor.ts"]
+    healthcheck: *worker-health
+    stop_grace_period: 30s
+
+  render:
+    <<: *app
+    command: ["node", "--import", "tsx", "src/workers/render.ts"]
+    healthcheck: *worker-health
+    stop_grace_period: 120s
+    # Leave headroom for web/db while FFmpeg + whisper run.
+    cpus: ${RENDER_CPUS:-3}
+    mem_limit: ${RENDER_MEM:-5g}
+
+  uploader:
+    <<: *app
+    command: ["node", "--import", "tsx", "src/workers/uploader.ts"]
+    healthcheck: *worker-health
+    stop_grace_period: 120s
+
+  backup:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    command: ["loop"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-t2t}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-t2t}
+      PGHOST: postgres
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./docker/backup.sh:/backup.sh:ro
+      - ./backups:/backups
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    logging: *logging
+
+  # Restarts containers that report unhealthy (Docker itself only restarts on exit).
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: all
+      AUTOHEAL_INTERVAL: 30
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web]
+    logging: *logging
+
+volumes:
+  pgdata:
+  redisdata:
+  appdata:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,49 @@
+{
+  "name": "twitch2tiktok",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "migrate": "node --import tsx src/lib/migrate.ts",
+    "worker:monitor": "node --import tsx src/workers/monitor.ts",
+    "worker:render": "node --import tsx src/workers/render.ts",
+    "worker:uploader": "node --import tsx src/workers/uploader.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e-live": "tsx scripts/live-e2e.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "bullmq": "^6.3.12",
+    "ioredis": "^6.0.0",
+    "jose": "^6.2.12",
+    "next": "^16.4.0",
+    "nodemailer": "^10.1.0",
+    "pino": "^10.4.0",
+    "postgres": "^3.4.9",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.6.5",
+    "@types/nodemailer": "^8.0.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "embedded-postgres": "^18.4.0-beta.17",
+    "pino-pretty": "^13.2.0",
+    "postcss": "^8.5.29",
+    "redis-memory-server": "^0.17.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

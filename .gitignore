@@ -1,0 +1,13 @@
+node_modules
+.next
+.env
+.env.local
+data/
+.tmp/
+*.log
+coverage
+next-env.d.ts
+tsconfig.tsbuildinfo
+tests/fixtures/
+.tmp/
+.tools/
