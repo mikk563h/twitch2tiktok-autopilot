@@ -29,8 +29,9 @@ export const settingsSchema = z.object({
     downloadMethod: z.enum(["auto", "official", "public"]).default("auto"),
   }).prefault({}),
   editor: z.object({
-    layout: z.enum(["auto", "blur", "crop", "split"]).default("auto"),
-    blurZoom: z.number().min(1).max(2).default(1.2),
+    layout: z.enum(["auto", "blur", "crop", "split"]).default("blur"),
+    // 1.0 = the whole source frame is always visible (nothing cropped).
+    blurZoom: z.number().min(1).max(2).default(1),
     foregroundY: z.number().min(0).max(1).default(0.5),
     cropMode: z.enum(["smart", "center"]).default("smart"),
     facecamMode: z.enum(["auto", "manual", "off"]).default("auto"),
