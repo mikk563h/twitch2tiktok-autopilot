@@ -21,7 +21,7 @@ export default async function HealthPage() {
   return (
     <>
       <AutoRefresh ms={10000} />
-      <PageHeader title="System Health" subtitle={`Version ${h.version} · ${h.runMode === "batch" ? "Gratis-mode: Vercel + Oracle Cloud + Neon" : "Server-mode: Docker-workers"}`} />
+      <PageHeader title="System Health" subtitle={`Version ${h.version} · ${h.runMode === "batch" ? "Gratis-mode: Vercel + Neon + din computer" : "Server-mode: Docker-workers"}`} />
       {h.runMode === "workers" && <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Stat label="Disk" value={h.disk ? `${Math.round(diskUsedPct * 100)}%` : "?"} tone={diskUsedPct > 0.9 ? "bad" : diskUsedPct > 0.8 ? "warn" : "ok"} sub={h.disk ? `${bytes(h.disk.free)} fri af ${bytes(h.disk.total)}` : ""} />
         <Stat label="Hukommelse" value={latest ? `${Math.round((1 - Number(latest.mem_free) / Number(latest.mem_total)) * 100)}%` : "?"} sub={latest ? `${bytes(Number(latest.mem_free))} fri` : ""} />
@@ -35,7 +35,7 @@ export default async function HealthPage() {
           <div className="space-y-3">
             <StatusLine tone={h.dbOk ? "ok" : "bad"} title="PostgreSQL" detail={h.dbOk ? "forbundet" : "ingen forbindelse"} />
             {h.runMode === "workers" && <StatusLine tone={h.redisOk ? "ok" : "bad"} title="Redis" detail={h.redisOk ? `forbundet · ${h.redisInfo}` : "ingen forbindelse"} />}
-            {h.workers.map((w) => <StatusLine key={w.worker} tone={w.alive ? "ok" : "bad"} title={h.runMode === "batch" ? "Autopilot (Oracle-server)" : `Worker: ${w.worker}`} detail={`${w.alive ? "kører" : "NEDE"} · ${h.runMode === "batch" ? "seneste kørsel" : "heartbeat"} ${ago(w.lastBeatAt)} · v${String(w.version ?? "?").slice(0, 7)}`} />)}
+            {h.workers.map((w) => <StatusLine key={w.worker} tone={w.alive ? "ok" : "bad"} title={h.runMode === "batch" ? "Autopilot (din computer)" : `Worker: ${w.worker}`} detail={`${w.alive ? "kører" : "NEDE"} · ${h.runMode === "batch" ? "seneste kørsel" : "heartbeat"} ${ago(w.lastBeatAt)} · v${String(w.version ?? "?").slice(0, 7)}`} />)}
           </div>
         </Card>
         <Card title="Seneste succes">
@@ -101,7 +101,7 @@ export default async function HealthPage() {
             </div>
           ))}
         </div>
-        <p className="hint">{h.runMode === "batch" ? "Fulde logs: journalctl -u t2t-autopilot på Oracle-serveren." : "Fulde logs: docker compose logs -f (roteres automatisk: 5 × 10 MB pr. container)."}</p>
+        <p className="hint">{h.runMode === "batch" ? "Fulde logs: ~/.t2t/logs/run.log på din computer." : "Fulde logs: docker compose logs -f (roteres automatisk: 5 × 10 MB pr. container)."}</p>
       </Card>
     </>
   );

@@ -56,7 +56,7 @@ export default async function OverviewPage() {
         <Card title={batch ? "Autopilot" : "Workers"}>
           <div className="space-y-3">
             {workers.map((w) => (
-              <StatusLine key={w.worker} tone={w.alive ? "ok" : "bad"} title={batch ? (w.alive ? "Kører som planlagt" : "Ingen kørsel for nylig") : w.worker}
+              <StatusLine key={w.worker} tone={w.alive ? "ok" : "bad"} title={batch ? (w.alive ? "Kører som planlagt" : "Ingen kørsel for nylig (er computeren slukket?)") : w.worker}
                 detail={batch ? `Seneste kørsel ${ago(w.lastBeatAt)}` : w.alive ? `heartbeat ${ago(w.lastBeatAt)}` : `NEDE — sidste heartbeat ${ago(w.lastBeatAt)}`} />
             ))}
             {runs.map((r) => (

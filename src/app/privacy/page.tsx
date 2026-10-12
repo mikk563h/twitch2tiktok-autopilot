@@ -8,7 +8,7 @@ export default function Privacy() {
       <p>Denne tjeneste er et privat værktøj, som ejeren af den forbundne TikTok-konto bruger til at genudgive Twitch-clips fra en kanal, hvor ejeren har tilladelse.</p>
       <p><b className="text-fg">Data vi behandler:</b> OAuth-tokens til TikTok og Twitch (krypteret), offentlige oplysninger om TikTok-profilen (visningsnavn, brugernavn, avatar) og metadata om de clips, der uploades. Vi indsamler ikke data om andre brugere eller seere.</p>
       <p><b className="text-fg">Formål:</b> udelukkende at uploade videoer til den forbundne konto efter kontoejerens samtykke.</p>
-      <p><b className="text-fg">Deling:</b> Data deles ikke med tredjeparter ud over TikTok/Twitch API&apos;erne og hostingudbydere (Vercel, Oracle Cloud, Neon).</p>
+      <p><b className="text-fg">Deling:</b> Data deles ikke med tredjeparter ud over TikTok/Twitch API&apos;erne og hostingudbydere (Vercel, Neon).</p>
       <p><b className="text-fg">Sletning:</b> Kontoejeren kan til enhver tid afbryde forbindelsen i dashboardet, hvorved tokens slettes, eller tilbagekalde adgangen i TikTok-appen.</p>
       {contact && <p>Kontakt: <a className="text-accent-2" href={`mailto:${contact}`}>{contact}</a></p>}
       <hr className="border-border" />

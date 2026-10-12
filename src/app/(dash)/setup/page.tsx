@@ -62,14 +62,14 @@ export default async function SetupPage() {
         <Step n={1} title="Serverstatus" tone={dbOk && redisOk && workersOk ? "ok" : "bad"} status={dbOk && redisOk && workersOk ? "Alt kører" : "Problemer"}>
           <p>Database: {dbOk ? "✓" : "✗"}{config.runMode === "workers" && <> · Redis: {redisOk ? "✓" : "✗"}</>} · {config.runMode === "batch" ? "Autopilot" : "Workers"}: {workers.map((w) => `${w.worker} ${w.alive ? "✓" : "✗"}`).join(", ")}{disk && ` · Fri disk: ${bytes(disk.free)}`}</p>
           {!workersOk && (config.runMode === "batch"
-            ? <p className="text-bad">Ingen kørsel for nylig. Autopilot-serveren kører hvert 15. minut; hvis dette varer ved, er serveren nede.</p>
+            ? <p className="text-bad">Ingen kørsel for nylig. Autopiloten kører hvert 15. minut, når din computer er tændt og vågen. Clips, der kommer mens den er slukket, indhentes automatisk.</p>
             : <p className="text-bad">Start alle containere: <Code>docker compose up -d</Code> og tjek <Code>docker compose ps</Code>.</p>)}
         </Step>
 
         <Step n={2} title="Twitch Developer App" tone={twitchOk ? "ok" : config.twitchClientId ? "warn" : "bad"} status={twitchOk ? `API virker (${ago(twitchOk)})` : config.twitchClientId ? "Ikke testet" : "Mangler"}>
           <p>Opret en app på <a className="text-accent-2 underline" href="https://dev.twitch.tv/console/apps" target="_blank" rel="noreferrer">dev.twitch.tv/console/apps</a> → “Register Your Application”. Kategori: <i>Application Integration</i>. Client type: <i>Confidential</i>.</p>
           <p>OAuth Redirect URL: <Code>{twitchRedirectUri()}</Code></p>
-          <p>Sæt <Code>TWITCH_CLIENT_ID</Code> og <Code>TWITCH_CLIENT_SECRET</Code> {config.runMode === "batch" ? "i både Vercel (Environment Variables) og serverens /etc/t2t.env" : <>i <Code>.env</Code> og genstart (<Code>./scripts/deploy.sh</Code>)</>}.</p>
+          <p>Sæt <Code>TWITCH_CLIENT_ID</Code> og <Code>TWITCH_CLIENT_SECRET</Code> {config.runMode === "batch" ? "i både Vercel (Environment Variables) og ~/.t2t/t2t.env på din computer" : <>i <Code>.env</Code> og genstart (<Code>./scripts/deploy.sh</Code>)</>}.</p>
           {config.twitchClientId && <ActionForm action={testTwitch}><SubmitButton className="btn-ghost">Test Twitch API</SubmitButton></ActionForm>}
         </Step>
 
