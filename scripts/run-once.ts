@@ -15,7 +15,7 @@ import { migrate } from "@/lib/migrate";
 import { getSettings } from "@/lib/settings";
 import { takeRequests, type JobRequest } from "@/lib/queue";
 import { record, errMsg, log } from "@/lib/log";
-import { runIncrementalScan, runHistoricalImport } from "@/lib/twitch/monitor";
+import { runIncrementalScan, runHistoricalImport, refreshViewCounts } from "@/lib/twitch/monitor";
 import { TwitchNotConfigured } from "@/lib/twitch/api";
 import { processClip } from "@/lib/pipeline/process";
 import { getClip } from "@/lib/clips";
@@ -65,12 +65,42 @@ async function applyNewestSelection(): Promise<number | null> {
   return Number(newest.id);
 }
 
-/** Next clip to publish in newest-first mode: hand-queued clips first, then the newest auto clip. */
-async function nextNewestCandidate(): Promise<number | null> {
-  const newest = await applyNewestSelection();
+/**
+ * "Best since last post": among all auto-discovered clips still waiting (everything since the previous
+ * pick — older ones were skipped then), take the one with the most Twitch views right now.
+ */
+async function bestCandidate(): Promise<number | null> {
+  const rows = await sql()`SELECT id, twitch_clip_id FROM clips WHERE origin = 'monitor' AND status = ANY(${WAITING})
+                           AND (next_retry_at IS NULL OR next_retry_at <= now()) ORDER BY twitch_created_at DESC LIMIT 500`;
+  if (!rows.length) return null;
+  try {
+    await refreshViewCounts(rows.map((r) => r.twitch_clip_id as string));
+  } catch (err) {
+    await record("warn", "twitch", `Kunne ikke opdatere visningstal (bruger gemte tal): ${errMsg(err)}`);
+  }
+  const [best] = await sql()`SELECT id, view_count FROM clips WHERE id = ANY(${rows.map((r) => r.id as string)}::bigint[])
+                             ORDER BY view_count DESC NULLS LAST, twitch_created_at DESC LIMIT 1`;
+  summary.best = { id: Number(best.id), views: best.view_count, candidates: rows.length };
+  return Number(best.id);
+}
+
+/** After a pick has gone to TikTok, every other waiting auto clip lost its slot. */
+async function skipOthers(pickedId: number, reason: string) {
+  const db = sql();
+  const skipped = await db`UPDATE clips SET status = 'SKIPPED', status_reason = ${reason}, locked_by = NULL, next_retry_at = NULL, updated_at = now()
+                           WHERE origin = 'monitor' AND id <> ${pickedId} AND status = ANY(${WAITING}) RETURNING id`;
+  const events = skipped.map((r) => ({ clip_id: r.id, to_status: "SKIPPED", message: `Sprunget over: ${reason}` }));
+  for (let i = 0; i < events.length; i += 500) await db`INSERT INTO clip_events ${db(events.slice(i, i + 500), "clip_id", "to_status", "message")}`;
+  if (skipped.length) summary.skipped = ((summary.skipped as number) ?? 0) + skipped.length;
+}
+
+/** Next clip to publish: hand-queued clips first, then per the selection mode. */
+async function nextCandidate(mode: "best" | "newest"): Promise<number | null> {
+  const auto = mode === "newest" ? await applyNewestSelection() : null;
   const [manual] = await sql()`SELECT id FROM clips WHERE origin <> 'monitor' AND origin <> 'baseline' AND status = ANY(${WAITING})
                                AND (next_retry_at IS NULL OR next_retry_at <= now()) ORDER BY COALESCE(twitch_created_at, created_at) LIMIT 1`;
-  return manual ? Number(manual.id) : newest;
+  if (manual) return Number(manual.id);
+  return mode === "newest" ? auto : bestCandidate();
 }
 
 async function pendingWork(): Promise<{ process: number; upload: number; poll: number }> {
@@ -83,9 +113,13 @@ async function pendingWork(): Promise<{ process: number; upload: number; poll: n
            count(*) FILTER (WHERE status IN ('READY','UPLOADING') AND (next_retry_at IS NULL OR next_retry_at <= now()))::int AS upload,
            count(*) FILTER (WHERE status = 'PROCESSING')::int AS poll
     FROM clips`;
-  if (s.automation.selection === "newest") {
-    const candidate = canPost ? await nextNewestCandidate() : (await applyNewestSelection(), null);
-    return { process: r.manual + (candidate ? 1 : 0), upload: candidate ? 1 : 0, poll: r.poll };
+  if (s.automation.selection !== "all") {
+    const mode = s.automation.selection;
+    const [hasAuto] = await sql()`SELECT 1 FROM clips WHERE origin = 'monitor' AND status = ANY(${WAITING}) LIMIT 1`;
+    if (mode === "newest" && !canPost) await applyNewestSelection();
+    const [hasManual] = await sql()`SELECT 1 FROM clips WHERE origin NOT IN ('monitor','baseline') AND status = ANY(${WAITING}) LIMIT 1`;
+    const candidate = canPost && (hasAuto || hasManual) ? 1 : 0;
+    return { process: r.manual + candidate, upload: candidate, poll: r.poll };
   }
   return { process: r.process, upload: canPost ? r.upload : 0, poll: r.poll };
 }
@@ -157,7 +191,8 @@ async function work(requests: JobRequest[]) {
   };
   const canPost = settings.automation.autoPublish && settings.tiktok.mode !== "manual";
 
-  if (settings.automation.selection === "newest") {
+  if (settings.automation.selection !== "all") {
+    const mode = settings.automation.selection;
     // 2) Hand-queued clips (test clip, historical import, "Behandl") are always prepared.
     const tried = new Set<number>();
     while (timeLeft() > 5 * 60_000) {
@@ -167,17 +202,22 @@ async function work(requests: JobRequest[]) {
       tried.add(Number(next.id));
       await processOne(Number(next.id));
     }
-    // 3) Forced uploads, then one slot: the newest clip (only rendered when it is actually posted).
+    // 3) Forced uploads, then one slot: the chosen clip (only rendered when it is actually posted).
     for (const id of forced) if (timeLeft() > 3 * 60_000) await uploadOne(id, true);
     if (canPost && !(await nextAllowedPostTime(settings)).at && timeLeft() > 5 * 60_000) {
-      const id = await nextNewestCandidate();
+      const id = await nextCandidate(mode);
       if (id) {
         const c = await getClip(id);
         if (c && PROCESSABLE.includes(c.status)) await processOne(id);
         const after = await getClip(id);
-        if (after?.status === "READY" || after?.status === "UPLOADING") await uploadOne(id, false);
+        if (after?.status === "READY" || after?.status === "UPLOADING") {
+          const st = await uploadOne(id, false);
+          if (mode === "best" && c?.origin === "monitor" && (st === "PROCESSING" || st === "PUBLISHED")) {
+            await skipOthers(id, "et clip med flere visninger fra samme periode blev valgt");
+          }
+        }
       }
-    } else {
+    } else if (mode === "newest") {
       await applyNewestSelection();
     }
     summary.work = counts;

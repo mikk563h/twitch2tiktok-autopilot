@@ -131,6 +131,23 @@ describe("gratis-mode: run-once uden Redis (MOCK APIs)", () => {
     expect(w.status).toBe("DISCOVERED");
   });
 
+  it("bedste siden sidste opslag: clippet med flest (friske) visninger vælges, resten springes over", { timeout: 240_000 }, async () => {
+    await runIncrementalScan();
+    const s = await getSyncState();
+    await setState("twitch.sync", { ...s, baselineDoneAt: new Date(Date.now() - 3600_000).toISOString(), lastSuccessEnd: new Date(Date.now() - 30_000).toISOString(), lastDeepAt: new Date().toISOString() });
+    await updateSettings("automation", { selection: "best", minMinutesBetweenPosts: 95, maxPostsPer24h: 15 });
+    for (const [id, views, ago] of [["b-a", 5, 300_000], ["b-b", 50, 200_000], ["b-c", 1, 10_000]] as const)
+      mock.state.s.clips.push({ id, created_at: new Date(Date.now() - ago).toISOString(), title: id, view_count: views });
+    // Registered first with stale counts; by posting time b-c has become the most viewed.
+    await runIncrementalScan();
+    mock.state.s.clips.find((c) => c.id === "b-c")!.view_count = 120;
+    const r = await runOnce("all");
+    expect(r.code, r.out).toBe(0);
+    const rows = Object.fromEntries((await sql()`SELECT twitch_clip_id, status, view_count FROM clips WHERE twitch_clip_id LIKE 'b-%'`).map((x) => [x.twitch_clip_id, x.status]));
+    expect(rows).toEqual({ "b-c": "PUBLISHED", "b-a": "SKIPPED", "b-b": "SKIPPED" });
+    expect(mock.state.s.publishedIds).toHaveLength(1);
+  });
+
   it("dashboard-anmodning (upload-now) gemmes i DB og udføres af næste kørsel", async () => {
     const { requestJob } = await import("@/lib/queue");
     // requestJob checks the run mode at call time.

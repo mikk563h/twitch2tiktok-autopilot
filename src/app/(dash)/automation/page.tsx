@@ -31,10 +31,11 @@ export default async function AutomationPage() {
             <div>
               <label className="label">Hvilke clips uploades</label>
               <select name="selection" defaultValue={a.selection} className="input max-w-xl">
-                <option value="newest">Nyeste først — hvert ledigt opslag tager det senest klippede clip (anbefalet)</option>
+                <option value="best">Bedste siden sidste opslag — flest visninger på Twitch (anbefalet)</option>
+                <option value="newest">Nyeste først — hvert ledigt opslag tager det senest klippede clip</option>
                 <option value="all">Alle, ældste først (køen kan vokse meget på travle dage)</option>
               </select>
-              <p className="hint">Med “nyeste først” markeres ældre clips, der ikke nåede med, som “Sprunget over”. De kan stadig sættes i kø manuelt fra Clip Library.</p>
+              <p className="hint">Clips, der ikke blev valgt, markeres som “Sprunget over”. De kan stadig sættes i kø manuelt fra Clip Library.</p>
             </div>
             <div className="grid gap-4 pt-2 md:grid-cols-3">
               <div><label className="label">Pollinginterval (sek)</label><input type="number" name="pollIntervalSec" min={30} max={3600} defaultValue={a.pollIntervalSec} className="input" /><p className="hint">{config.runMode === "batch" ? "Gratis-mode: din computer kører hvert 15. minut — denne værdi bruges ikke." : "Min. 30. Ét scan bruger typisk 1–3 API-kald."}</p></div>

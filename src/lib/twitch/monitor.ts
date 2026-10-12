@@ -264,3 +264,20 @@ export async function runHistoricalImport(start: Date, end: Date): Promise<{ que
     throw err;
   }
 }
+
+/** Re-reads current view counts from Twitch (100 ids per request) and stores them. */
+export async function refreshViewCounts(twitchIds: string[]): Promise<number> {
+  const db = sql();
+  let updated = 0;
+  for (let i = 0; i < twitchIds.length; i += 100) {
+    const p = new URLSearchParams({ first: "100" });
+    twitchIds.slice(i, i + 100).forEach((id) => p.append("id", id));
+    const { data } = await helix<TwitchClip>("/clips", p);
+    const rows = data.filter((c) => twitchIds.includes(c.id)).map((c) => ({ id: c.id, views: c.view_count }));
+    if (!rows.length) continue;
+    await db`UPDATE clips SET view_count = v.views::int FROM (VALUES ${db(rows.map((r) => [r.id, r.views]))}) AS v(id, views)
+             WHERE clips.twitch_clip_id = v.id`;
+    updated += rows.length;
+  }
+  return updated;
+}
