@@ -98,7 +98,7 @@ async function handleTikTokError(clip: Clip, err: TikTokError, stage: "upload" |
   }
   if (code === "unaudited_client_can_only_post_to_private_accounts") {
     await patchTikTokRuntime({ unauditedSeenAt: new Date().toISOString() });
-    return failClip(clip, stage, err, { status: "BLOCKED_PERMISSION", reason: "TikTok-appen er ikke auditeret: kun SELF_ONLY (privat) er tilladt. Vælg 'Kun mig' eller afvent TikToks audit." });
+    return failClip(clip, stage, err, { status: "BLOCKED_PERMISSION", reason: "TikTok-appen er ikke godkendt endnu, så TikTok kræver at selve kontoen er PRIVAT. Åbn TikTok-appen → Profil → ☰ → Indstillinger og privatliv → Privatliv → slå 'Privat konto' til. Opslag skal også være 'Kun mig'. Prøv derefter igen." });
   }
   if (code === "privacy_level_option_mismatch") {
     return failClip(clip, stage, err, { status: "NEEDS_USER_ACTION", reason: "Den valgte synlighed er ikke tilladt for kontoen — vælg igen i Account Settings" });

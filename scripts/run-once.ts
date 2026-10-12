@@ -67,10 +67,10 @@ async function applyNewestSelection(): Promise<number | null> {
 
 /** Next clip to publish in newest-first mode: hand-queued clips first, then the newest auto clip. */
 async function nextNewestCandidate(): Promise<number | null> {
+  const newest = await applyNewestSelection();
   const [manual] = await sql()`SELECT id FROM clips WHERE origin <> 'monitor' AND origin <> 'baseline' AND status = ANY(${WAITING})
                                AND (next_retry_at IS NULL OR next_retry_at <= now()) ORDER BY COALESCE(twitch_created_at, created_at) LIMIT 1`;
-  if (manual) return Number(manual.id);
-  return applyNewestSelection();
+  return manual ? Number(manual.id) : newest;
 }
 
 async function pendingWork(): Promise<{ process: number; upload: number; poll: number }> {
