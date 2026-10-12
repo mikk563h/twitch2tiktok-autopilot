@@ -6,6 +6,8 @@ const PUBLIC = ["/login", "/api/login", "/api/health", "/api/cron", "/privacy", 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return NextResponse.next();
+  // TikTok developer-site verification file (public/tiktok*.txt).
+  if (/^\/tiktok[A-Za-z0-9]+\.txt$/.test(pathname)) return NextResponse.next();
   if (await verifySessionToken(req.cookies.get(SESSION_COOKIE)?.value)) return NextResponse.next();
   if (pathname.startsWith("/api/")) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const url = req.nextUrl.clone();
