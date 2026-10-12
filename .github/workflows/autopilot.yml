@@ -36,11 +36,11 @@ jobs:
       SMTP_URL: ${{ secrets.SMTP_URL }}
       ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
       HEARTBEAT_URL: ${{ secrets.HEARTBEAT_URL }}
-      DATA_DIR: ${{ runner.temp }}/t2t-data
-      FFMPEG_PATH: ${{ runner.temp }}/bin/ffmpeg
-      FFPROBE_PATH: ${{ runner.temp }}/bin/ffprobe
-      WHISPER_BIN: ${{ runner.temp }}/bin/whisper-cli
-      YTDLP_PATH: ${{ runner.temp }}/bin/yt-dlp
+      DATA_DIR: /tmp/t2t/t2t-data
+      FFMPEG_PATH: /tmp/t2t/bin/ffmpeg
+      FFPROBE_PATH: /tmp/t2t/bin/ffprobe
+      WHISPER_BIN: /tmp/t2t/bin/whisper-cli
+      YTDLP_PATH: /tmp/t2t/bin/yt-dlp
       DB_POOL_MAX: "4"
       LOG_LEVEL: info
     steps:
@@ -64,13 +64,13 @@ jobs:
         id: tools
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/bin
+          path: /tmp/t2t/bin
           key: tools-${{ runner.os }}-whisper-${{ env.WHISPER_CPP_VERSION }}-ytdlp-${{ env.YTDLP_VERSION }}-ffmpeg-7
 
       - name: Build tools (first run only, ~3 min)
         if: steps.plan.outputs.work == 'true' && steps.tools.outputs.cache-hit != 'true'
         run: |
-          mkdir -p "$RUNNER_TEMP/bin" && cd "$RUNNER_TEMP"
+          mkdir -p /tmp/t2t/bin && cd /tmp/t2t
           # FFmpeg (static build incl. libass, x264, loudnorm)
           curl -fsSL -o ff.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
           tar -xf ff.tar.xz && cp ffmpeg-*-static/ffmpeg ffmpeg-*-static/ffprobe bin/
@@ -94,7 +94,7 @@ jobs:
         if: steps.plan.outputs.work == 'true'
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/t2t-data/models
+          path: /tmp/t2t/t2t-data/models
           key: whisper-model-${{ env.WHISPER_MODEL }}
 
       - name: Work (edit, upload, check status)
