@@ -62,7 +62,7 @@ export default async function ClipsPage({ searchParams }: { searchParams: Promis
                   <td className="px-4 py-3">
                     <StatusBadge status={c.status} />
                     {c.status_reason && c.status !== "PUBLISHED" && <div className="mt-1.5 max-w-56 text-xs text-muted">{c.status_reason}</div>}
-                    {c.status === "BASELINE" && (
+                    {(c.status === "BASELINE" || c.status === "SKIPPED") && (
                       <ActionForm action={queueClip} className="mt-2"><input type="hidden" name="id" value={c.id} /><SubmitButton className="btn-ghost text-xs">Sæt i kø</SubmitButton></ActionForm>
                     )}
                   </td>

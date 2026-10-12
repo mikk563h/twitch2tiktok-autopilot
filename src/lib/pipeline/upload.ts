@@ -170,7 +170,7 @@ export async function uploadClip(clipId: number, opts: { force?: boolean } = {})
   // FIFO: only the oldest due READY clip may start, so a long queue is published in order.
   const [older] = await sql()`SELECT id FROM clips WHERE status = 'READY' AND id <> ${clipId} AND (next_retry_at IS NULL OR next_retry_at <= now())
                                AND COALESCE(twitch_created_at, created_at) < ${clip.twitch_created_at ?? clip.created_at} ORDER BY COALESCE(twitch_created_at, created_at) LIMIT 1`;
-  if (older && !opts.force) {
+  if (older && !opts.force && settings.automation.selection !== "newest") {
     await enqueueClip("upload", Number(older.id));
     return "READY";
   }

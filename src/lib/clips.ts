@@ -3,7 +3,7 @@ import { toJson } from "./log";
 
 export const CLIP_STATUSES = [
   "BASELINE", "DISCOVERED", "QUEUED", "DOWNLOADING", "DOWNLOADED", "ANALYZING", "EDITING", "READY",
-  "UPLOADING", "PROCESSING", "PUBLISHED", "RETRY_WAIT", "BLOCKED_PERMISSION", "NEEDS_USER_ACTION", "FAILED",
+  "UPLOADING", "PROCESSING", "PUBLISHED", "RETRY_WAIT", "BLOCKED_PERMISSION", "NEEDS_USER_ACTION", "FAILED", "SKIPPED",
 ] as const;
 export type ClipStatus = (typeof CLIP_STATUSES)[number];
 
@@ -28,6 +28,7 @@ export const STATUS_LABELS: Record<ClipStatus, string> = {
   BLOCKED_PERMISSION: "Mangler rettighed",
   NEEDS_USER_ACTION: "Kræver handling",
   FAILED: "Fejlet",
+  SKIPPED: "Sprunget over",
 };
 
 export interface Clip {

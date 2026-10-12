@@ -87,7 +87,7 @@ describe("gratis-mode: run-once uden Redis (MOCK APIs)", () => {
     const s = await getSyncState();
     await setState("twitch.sync", { ...s, baselineDoneAt: new Date(Date.now() - 3600_000).toISOString(), lastSuccessEnd: new Date(Date.now() - 30_000).toISOString(), lastDeepAt: new Date().toISOString() });
     mock.state.s.clips.push({ id: "gha-2", created_at: new Date(Date.now() - 10_000).toISOString(), title: "x", view_count: 1 });
-    await updateSettings("automation", { autoPublish: false });
+    await updateSettings("automation", { autoPublish: false, selection: "all" });
     expect((await runOnce("all")).code).toBe(0);
     const [row] = await sql()`SELECT id, status, render_path FROM clips WHERE twitch_clip_id = 'gha-2'`;
     expect(row).toMatchObject({ status: "READY", render_path: null });
@@ -104,11 +104,31 @@ describe("gratis-mode: run-once uden Redis (MOCK APIs)", () => {
     const s = await getSyncState();
     await setState("twitch.sync", { ...s, baselineDoneAt: new Date(Date.now() - 3600_000).toISOString(), lastSuccessEnd: new Date(Date.now() - 30_000).toISOString(), lastDeepAt: new Date().toISOString() });
     mock.state.s.clips.push({ id: "vm-1", created_at: new Date(Date.now() - 10_000).toISOString(), title: "x", view_count: 1 });
-    await updateSettings("automation", { autoPublish: false });
+    await updateSettings("automation", { autoPublish: false, selection: "all" });
     expect((await runOnce("all", { RUN_EPHEMERAL: "0" })).code).toBe(0);
     const [row] = await sql()`SELECT status, render_path FROM clips WHERE twitch_clip_id = 'vm-1'`;
     expect(row.status).toBe("READY");
     expect(row.render_path && fs.existsSync(row.render_path)).toBe(true);
+  });
+
+  it("nyeste først: kun det nyeste clip redigeres og uploades, ældre markeres som sprunget over", { timeout: 240_000 }, async () => {
+    await runIncrementalScan();
+    const s = await getSyncState();
+    await setState("twitch.sync", { ...s, baselineDoneAt: new Date(Date.now() - 3600_000).toISOString(), lastSuccessEnd: new Date(Date.now() - 30_000).toISOString(), lastDeepAt: new Date().toISOString() });
+    await updateSettings("automation", { selection: "newest", minMinutesBetweenPosts: 180, maxPostsPer24h: 8 });
+    for (const [id, ago] of [["n-old", 300_000], ["n-mid", 120_000], ["n-new", 10_000]] as const)
+      mock.state.s.clips.push({ id, created_at: new Date(Date.now() - ago).toISOString(), title: id, view_count: 1 });
+    const r = await runOnce("all");
+    expect(r.code, r.out).toBe(0);
+    const rows = Object.fromEntries((await sql()`SELECT twitch_clip_id, status FROM clips WHERE twitch_clip_id LIKE 'n-%'`).map((x) => [x.twitch_clip_id, x.status]));
+    expect(rows).toEqual({ "n-new": "PUBLISHED", "n-mid": "SKIPPED", "n-old": "SKIPPED" });
+    expect(mock.state.s.publishedIds).toHaveLength(1);
+    // A newer clip arrives, but the next posting slot is 3 hours away: nothing is rendered, it just waits.
+    mock.state.s.clips.push({ id: "n-newer", created_at: new Date(Date.now() - 5_000).toISOString(), title: "newer", view_count: 1 });
+    const p = await runOnce("plan");
+    expect(p.out).toContain("work=false");
+    const [w] = await sql()`SELECT status FROM clips WHERE twitch_clip_id = 'n-newer'`;
+    expect(w.status).toBe("DISCOVERED");
   });
 
   it("dashboard-anmodning (upload-now) gemmes i DB og udføres af næste kørsel", async () => {

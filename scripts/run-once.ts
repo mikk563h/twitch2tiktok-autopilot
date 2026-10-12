@@ -18,6 +18,7 @@ import { record, errMsg, log } from "@/lib/log";
 import { runIncrementalScan, runHistoricalImport } from "@/lib/twitch/monitor";
 import { TwitchNotConfigured } from "@/lib/twitch/api";
 import { processClip } from "@/lib/pipeline/process";
+import { getClip } from "@/lib/clips";
 import { uploadClip, checkPublishStatus, nextAllowedPostTime } from "@/lib/pipeline/upload";
 import { reconcile, housekeeping, evaluateAlerts } from "@/lib/pipeline/maintenance";
 import { config } from "@/lib/config";
@@ -44,15 +45,48 @@ function output(key: string, value: string) {
 
 const PROCESSABLE = ["DISCOVERED", "QUEUED", "DOWNLOADING", "DOWNLOADED", "ANALYZING", "EDITING"];
 
+const WAITING = ["DISCOVERED", "QUEUED", "DOWNLOADING", "DOWNLOADED", "ANALYZING", "EDITING", "READY", "RETRY_WAIT"];
+
+/**
+ * "Newest first": only the most recent auto-discovered clip is a candidate; every older one that
+ * is still waiting is marked SKIPPED. Clips queued by hand (origin ≠ monitor) are never skipped.
+ */
+async function applyNewestSelection(): Promise<number | null> {
+  const db = sql();
+  const [newest] = await db`SELECT id FROM clips WHERE origin = 'monitor' AND status = ANY(${WAITING})
+                            ORDER BY twitch_created_at DESC NULLS LAST, id DESC LIMIT 1`;
+  if (!newest) return null;
+  const skipped = await db`UPDATE clips SET status = 'SKIPPED', status_reason = 'Et nyere clip blev prioriteret (nyeste først)',
+                             locked_by = NULL, next_retry_at = NULL, updated_at = now()
+                           WHERE origin = 'monitor' AND id <> ${newest.id} AND status = ANY(${WAITING}) RETURNING id, status`;
+  const events = skipped.map((r) => ({ clip_id: r.id, to_status: "SKIPPED", message: "Sprunget over: et nyere clip blev prioriteret" }));
+  for (let i = 0; i < events.length; i += 500) await db`INSERT INTO clip_events ${db(events.slice(i, i + 500), "clip_id", "to_status", "message")}`;
+  if (skipped.length) summary.skipped = ((summary.skipped as number) ?? 0) + skipped.length;
+  return Number(newest.id);
+}
+
+/** Next clip to publish in newest-first mode: hand-queued clips first, then the newest auto clip. */
+async function nextNewestCandidate(): Promise<number | null> {
+  const [manual] = await sql()`SELECT id FROM clips WHERE origin <> 'monitor' AND origin <> 'baseline' AND status = ANY(${WAITING})
+                               AND (next_retry_at IS NULL OR next_retry_at <= now()) ORDER BY COALESCE(twitch_created_at, created_at) LIMIT 1`;
+  if (manual) return Number(manual.id);
+  return applyNewestSelection();
+}
+
 async function pendingWork(): Promise<{ process: number; upload: number; poll: number }> {
   const s = await getSettings();
+  const slot = await nextAllowedPostTime(s);
+  const canPost = s.automation.autoPublish && s.tiktok.mode !== "manual" && !slot.at;
   const [r] = await sql()`
     SELECT count(*) FILTER (WHERE status = ANY(${PROCESSABLE}) AND (${s.automation.autoEdit} OR status <> 'DISCOVERED'))::int AS process,
+           count(*) FILTER (WHERE status = ANY(${PROCESSABLE}) AND origin NOT IN ('monitor','baseline'))::int AS manual,
            count(*) FILTER (WHERE status IN ('READY','UPLOADING') AND (next_retry_at IS NULL OR next_retry_at <= now()))::int AS upload,
            count(*) FILTER (WHERE status = 'PROCESSING')::int AS poll
     FROM clips`;
-  const slot = await nextAllowedPostTime(s);
-  const canPost = s.automation.autoPublish && s.tiktok.mode !== "manual" && !slot.at;
+  if (s.automation.selection === "newest") {
+    const candidate = canPost ? await nextNewestCandidate() : (await applyNewestSelection(), null);
+    return { process: r.manual + (candidate ? 1 : 0), upload: candidate ? 1 : 0, poll: r.poll };
+  }
   return { process: r.process, upload: canPost ? r.upload : 0, poll: r.poll };
 }
 
@@ -100,26 +134,11 @@ async function work(requests: JobRequest[]) {
     await pollUntilSettled(Number(r.id), 60_000);
     counts.polled++;
   }
-  // 2) Download → analyse → render, oldest first.
-  const tried = new Set<number>();
-  while (timeLeft() > 5 * 60_000) {
-    const [next] = await sql()`SELECT id FROM clips WHERE status = ANY(${PROCESSABLE})
-      AND (${settings.automation.autoEdit} OR status <> 'DISCOVERED') AND NOT (id = ANY(${[...tried]}::bigint[]))
-      ORDER BY COALESCE(twitch_created_at, created_at) LIMIT 1`;
-    if (!next) break;
-    const id = Number(next.id);
-    tried.add(id);
-    const st = await processClip(id, INSTANCE);
-    if (st === "READY") counts.processed++;
-    else if (st !== "skipped") counts.failed++;
-    await beat({ counts });
-  }
-  // 3) Uploads: forced ones from the dashboard first, then the queue in order (rate limits apply).
   const forced = requests.filter((r): r is Extract<JobRequest, { name: "upload-now" }> => r.name === "upload-now").map((r) => r.clipId);
   const uploadOne = async (id: number, force: boolean) => {
     let st = await uploadClip(id, { force });
     if (st === "DOWNLOADED") {
-      // Render files don't survive between runs (ephemeral runner) — rebuild, then upload.
+      // Render file missing (ephemeral runner or cleaned up) — rebuild, then upload.
       await processClip(id, INSTANCE);
       st = await uploadClip(id, { force });
     }
@@ -129,8 +148,54 @@ async function work(requests: JobRequest[]) {
     }
     return st;
   };
+  const processOne = async (id: number) => {
+    const st = await processClip(id, INSTANCE);
+    if (st === "READY") counts.processed++;
+    else if (st !== "skipped") counts.failed++;
+    await beat({ counts });
+    return st;
+  };
+  const canPost = settings.automation.autoPublish && settings.tiktok.mode !== "manual";
+
+  if (settings.automation.selection === "newest") {
+    // 2) Hand-queued clips (test clip, historical import, "Behandl") are always prepared.
+    const tried = new Set<number>();
+    while (timeLeft() > 5 * 60_000) {
+      const [next] = await sql()`SELECT id FROM clips WHERE status = ANY(${PROCESSABLE}) AND origin NOT IN ('monitor','baseline')
+        AND NOT (id = ANY(${[...tried]}::bigint[])) ORDER BY COALESCE(twitch_created_at, created_at) LIMIT 1`;
+      if (!next) break;
+      tried.add(Number(next.id));
+      await processOne(Number(next.id));
+    }
+    // 3) Forced uploads, then one slot: the newest clip (only rendered when it is actually posted).
+    for (const id of forced) if (timeLeft() > 3 * 60_000) await uploadOne(id, true);
+    if (canPost && !(await nextAllowedPostTime(settings)).at && timeLeft() > 5 * 60_000) {
+      const id = await nextNewestCandidate();
+      if (id) {
+        const c = await getClip(id);
+        if (c && PROCESSABLE.includes(c.status)) await processOne(id);
+        const after = await getClip(id);
+        if (after?.status === "READY" || after?.status === "UPLOADING") await uploadOne(id, false);
+      }
+    } else {
+      await applyNewestSelection();
+    }
+    summary.work = counts;
+    return;
+  }
+
+  // "all": download → analyse → render everything, oldest first, then upload in order.
+  const tried = new Set<number>();
+  while (timeLeft() > 5 * 60_000) {
+    const [next] = await sql()`SELECT id FROM clips WHERE status = ANY(${PROCESSABLE})
+      AND (${settings.automation.autoEdit} OR status <> 'DISCOVERED') AND NOT (id = ANY(${[...tried]}::bigint[]))
+      ORDER BY COALESCE(twitch_created_at, created_at) LIMIT 1`;
+    if (!next) break;
+    tried.add(Number(next.id));
+    await processOne(Number(next.id));
+  }
   for (const id of forced) if (timeLeft() > 3 * 60_000) await uploadOne(id, true);
-  if (settings.automation.autoPublish && settings.tiktok.mode !== "manual") {
+  if (canPost) {
     const seen = new Set<number>();
     while (timeLeft() > 3 * 60_000) {
       const [next] = await sql()`SELECT id FROM clips WHERE status IN ('READY','UPLOADING') AND (next_retry_at IS NULL OR next_retry_at <= now())

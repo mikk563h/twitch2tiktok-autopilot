@@ -21,6 +21,7 @@ const STATUS_TONE: Record<ClipStatus, string> = {
   BLOCKED_PERMISSION: "bg-bad/10 text-bad border-bad/30",
   NEEDS_USER_ACTION: "bg-warn/15 text-warn border-warn/40",
   FAILED: "bg-bad/15 text-bad border-bad/40",
+  SKIPPED: "bg-faint/10 text-faint border-faint/25",
 };
 
 const ACTIVE: ClipStatus[] = ["DOWNLOADING", "ANALYZING", "EDITING", "UPLOADING", "PROCESSING"];

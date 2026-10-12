@@ -22,6 +22,8 @@ export const settingsSchema = z.object({
     deepScanLookbackHours: z.number().int().min(6).max(24 * 14).default(72),
     maxPostsPer24h: z.number().int().min(1).max(50).default(8),
     minMinutesBetweenPosts: z.number().int().min(0).max(24 * 60).default(45),
+    /** newest: each free posting slot takes the most recent clip; older unposted clips are skipped. all: everything, oldest first. */
+    selection: z.enum(["newest", "all"]).default("newest"),
   }).prefault({}),
   twitch: z.object({
     downloadMethod: z.enum(["auto", "official", "public"]).default("auto"),

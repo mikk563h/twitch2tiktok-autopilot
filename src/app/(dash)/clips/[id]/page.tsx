@@ -35,7 +35,7 @@ export default async function ClipPage({ params }: { params: Promise<{ id: strin
       {clip.status_reason && clip.status !== "PUBLISHED" && <div className="mb-4"><Notice tone={["FAILED", "BLOCKED_PERMISSION"].includes(clip.status) ? "bad" : "warn"}>{clip.status_reason}</Notice></div>}
 
       <div className="mb-6 flex flex-wrap gap-2">
-        {clip.status === "BASELINE" && <ActionForm action={queueClip}><input type="hidden" name="id" value={clip.id} /><SubmitButton>Behandl dette clip</SubmitButton></ActionForm>}
+        {(clip.status === "BASELINE" || clip.status === "SKIPPED") && <ActionForm action={queueClip}><input type="hidden" name="id" value={clip.id} /><SubmitButton>Behandl dette clip</SubmitButton></ActionForm>}
         {["FAILED", "RETRY_WAIT", "BLOCKED_PERMISSION"].includes(clip.status) || (clip.status === "NEEDS_USER_ACTION" && !clip.tiktok_publish_id) ? (
           <ActionForm action={retryClip}><input type="hidden" name="id" value={clip.id} /><SubmitButton>Prøv igen</SubmitButton></ActionForm>
         ) : null}

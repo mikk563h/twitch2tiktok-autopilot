@@ -47,6 +47,7 @@ export async function saveAutomation(_: ActionResult, fd: FormData) {
     if (autoPublish && s.tiktok.mode !== "manual" && (!s.tiktok.consentAt || !s.tiktok.musicConfirmationAt)) throw new Error("Giv samtykke under Accounts → TikTok publiceringsindstillinger først");
     await updateSettings("automation", {
       monitorEnabled: on(fd, "monitorEnabled"), autoEdit: on(fd, "autoEdit"), autoPublish,
+      selection: (str(fd, "selection") || "newest") as Settings["automation"]["selection"],
       pollIntervalSec: num(fd, "pollIntervalSec"), maxPostsPer24h: num(fd, "maxPostsPer24h"), minMinutesBetweenPosts: num(fd, "minMinutesBetweenPosts"),
       overlapMinutes: num(fd, "overlapMinutes"), deepScanEveryHours: num(fd, "deepScanEveryHours"), deepScanLookbackHours: num(fd, "deepScanLookbackHours"),
     });
@@ -181,9 +182,9 @@ export async function rerenderClip(_: ActionResult, fd: FormData) {
 export async function queueClip(_: ActionResult, fd: FormData) {
   return guard(async () => {
     const id = num(fd, "id");
-    const rows = await sql()`UPDATE clips SET status = 'QUEUED', origin = 'manual', updated_at = now() WHERE id = ${id} AND status = 'BASELINE' RETURNING id`;
-    if (!rows.length) throw new Error("Kun historiske (baseline) clips kan sættes i kø her");
-    await addEvent(id, "Sat i kø manuelt", { from: "BASELINE", to: "QUEUED" });
+    const rows = await sql()`UPDATE clips SET status = 'QUEUED', origin = 'manual', updated_at = now() WHERE id = ${id} AND status IN ('BASELINE','SKIPPED') RETURNING id`;
+    if (!rows.length) throw new Error("Kun historiske eller oversprungne clips kan sættes i kø her");
+    await addEvent(id, "Sat i kø manuelt", { to: "QUEUED" });
     await enqueueClip("process", id);
   }, "Clippet behandles nu", ["/clips"]);
 }

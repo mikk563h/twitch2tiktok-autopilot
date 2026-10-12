@@ -28,6 +28,14 @@ export default async function AutomationPage() {
             <Toggle name="monitorEnabled" label="Automatisk overvågning" desc="Scanner Twitch for nye clips med det valgte interval" checked={a.monitorEnabled} />
             <Toggle name="autoEdit" label="Automatisk videoredigering" desc="Nye clips downloades, analyseres og redigeres med det samme" checked={a.autoEdit} />
             <Toggle name="autoPublish" label="Automatisk publicering" desc="Klare videoer uploades til TikTok inden for grænserne herunder (kræver samtykke og TikTok-godkendelse)" checked={a.autoPublish} />
+            <div>
+              <label className="label">Hvilke clips uploades</label>
+              <select name="selection" defaultValue={a.selection} className="input max-w-xl">
+                <option value="newest">Nyeste først — hvert ledigt opslag tager det senest klippede clip (anbefalet)</option>
+                <option value="all">Alle, ældste først (køen kan vokse meget på travle dage)</option>
+              </select>
+              <p className="hint">Med “nyeste først” markeres ældre clips, der ikke nåede med, som “Sprunget over”. De kan stadig sættes i kø manuelt fra Clip Library.</p>
+            </div>
             <div className="grid gap-4 pt-2 md:grid-cols-3">
               <div><label className="label">Pollinginterval (sek)</label><input type="number" name="pollIntervalSec" min={30} max={3600} defaultValue={a.pollIntervalSec} className="input" /><p className="hint">{config.runMode === "batch" ? "Gratis-mode: din computer kører hvert 15. minut — denne værdi bruges ikke." : "Min. 30. Ét scan bruger typisk 1–3 API-kald."}</p></div>
               <div><label className="label">Maks posts pr. 24 t</label><input type="number" name="maxPostsPer24h" min={1} max={50} defaultValue={a.maxPostsPer24h} className="input" /><p className="hint">Hold dig under TikToks daglige grænse (typisk ~15 via API).</p></div>
