@@ -11,3 +11,5 @@ tsconfig.tsbuildinfo
 tests/fixtures/
 .tmp/
 .tools/
+.vercel
+.env*.local

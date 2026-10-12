@@ -16,7 +16,8 @@ function optional(name: string): string | undefined {
 }
 
 export const config = {
-  get databaseUrl() { return env("DATABASE_URL"); },
+  // Neon/Vercel: prefer the direct (unpooled) URL — session advisory locks don't work through PgBouncer.
+  get databaseUrl() { return optional("DATABASE_URL_UNPOOLED") ?? env("DATABASE_URL"); },
   get redisUrl() { return env("REDIS_URL", "redis://localhost:6379"); },
   /**
    * "workers": long-running workers + Redis/BullMQ (VPS/Docker).
