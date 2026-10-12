@@ -97,7 +97,14 @@ export async function registerClips(clips: TwitchClip[], decide: (c: TwitchClip)
       if (row.inserted) inserted.push({ id: Number(row.id), status: row.status as string, twitchId: c.id });
     }
   });
-  for (const r of inserted) await addEvent(r.id, r.status === "BASELINE" ? "Registreret i baseline (uploades ikke automatisk)" : "Nyt clip opdaget", { to: r.status });
+  // One multi-row insert per 500 events (a baseline can register thousands of clips).
+  const events = inserted.map((r) => ({
+    clip_id: r.id, to_status: r.status,
+    message: r.status === "BASELINE" ? "Registreret i baseline (uploades ikke automatisk)" : "Nyt clip opdaget",
+  }));
+  for (let i = 0; i < events.length; i += 500) {
+    await db`INSERT INTO clip_events ${db(events.slice(i, i + 500), "clip_id", "to_status", "message")}`;
+  }
   return inserted;
 }
 
